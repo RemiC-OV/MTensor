@@ -3,21 +3,30 @@
 Lorenz attractor
 ================
 
-This is an example of plotting Edward Lorenz's 1963 `"Deterministic Nonperiodic
-Flow"`_ in a 3-dimensional space using mplot3d.
+Author: R.CLOAREC
 
-.. _"Deterministic Nonperiodic Flow":
-   https://journals.ametsoc.org/view/journals/atsc/20/2/1520-0469_1963_020_0130_dnf_2_0_co_2.xml
+Example of plotting 3D Lorenz 63
+Deterministic Nonperiodic Flow
 
-.. note::
-   Because this is a simple non-linear ODE, it would be more easily done using
-   SciPy's ODE solver, but this approach depends only upon NumPy.
+journals.ametsoc.org/view/journals/atsc/20/2/1520-0469_1963_020_0130_dnf_2_0_co_2.xml
+
+Dynamical system learning based on MTensor format
+
+See refs:
+[kRLS]  Engel et al.  (10.1109/TSP.2004.830985)
+[kFSA]  Gelss et al.  (10.1016/j.knosys.2021.106935)
+[LANDO] Baddoo et al. (10.1098/rspa.2021.0830)
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.linalg import solve_triangular
 
-import tensorop as to
+import mtensor as mt
+
+
+DIST = False
+SAVEFIGS = False
 
 #============ UTILS ================================
 
@@ -44,14 +53,6 @@ def lorenz(xyz, *, s=10, r=28, b=2.667):
     return np.array([x_dot, y_dot, z_dot])
 
 init_pos = (0., 1., 1.05)
-
-# basis functions
-def basis(x, order=2):
-    
-    return np.array([x**i for i in range(order+1)])
-
-
-
 
 #=============== BUILD EXACT LORENZ ========================
 
@@ -91,7 +92,7 @@ def plot_lorenz(X, Y, Z, label=None):
 
 #plt.plot(*xyzs.T, label='real', lw=0.5, linestyle='-', color='k')
 
-#===================== BUILD TENSOR REGRESSION (full) ================
+#===================== FORMAT DATA ================
 
 X = xyzs[:-1,0]
 Y = xyzs[:-1,1]
@@ -105,11 +106,11 @@ m = num_steps
 
 psi = lambda x: np.array([1., x])
 
-phi = to.Tensor([np.array([psi(M[k, i]) for k in range(m)]) for i in range(3)])
+phi = mt.MTensor([np.array([psi(M[k, i]) for k in range(m)]) for i in range(3)])
 
-tmp_mtx = 1/m*np.ones((m,m))
+#tmp_mtx = 1/m*np.ones((m,m))
 P = phi@phi
-P = P - 2*tmp_mtx@P + tmp_mtx@P@tmp_mtx
+#P = P - 2*tmp_mtx@P + tmp_mtx@P@tmp_mtx
 
 # decompose P
 U, S = np.linalg.svd(P)[:2]
@@ -119,6 +120,7 @@ print(S)
 
 # regul parameter
 l = 1e-8
+l = 0
 
 # compute Z from P and rhs
 Z = np.linalg.lstsq(P + l*np.eye(m), xyzsdt)[0]
@@ -130,19 +132,23 @@ print('Error l2 new',np.linalg.norm(xyzsdt-check_rhs)/np.linalg.norm(xyzsdt))
 
 def f(x, y, z):
 
-   phi_x = to.Tensor([psi(x), psi(y), psi(z)])
+   phi_x = mt.MTensor([psi(x), psi(y), psi(z)])
 
    return ((phi_x@phi)@Z)[0]
 
-#===================== BUILD TENSOR REGRESSION =============
+#===================== BUILD LR TENSOR REGRESSION =============
 
 rnk = 8
+rnk = 15
 U_, S_ = U[:, :rnk], S[:rnk]
-P_ = (S_*U_) @ (S_*U_).T
+#P_ = (S_*U_) @ (S_*U_).T
 
 # test linearization by regressing
 # compute Z from P_ and rhs
-Z_ = U @ np.c_[U_, np.zeros((m, m-rnk))].T @ np.linalg.lstsq(P, xyzsdt)[0]
+#Z_ = (1/S_)**2*U_ @ U_.T @ xyzsdt # nope
+#Z_ = U @ np.c_[U_, np.zeros((m, m-rnk))].T @ np.linalg.lstsq(P_, xyzsdt)[0]# nope
+#Z_ = U @ np.c_[U_, np.zeros((m, m-rnk))].T @ np.linalg.lstsq(P, xyzsdt)[0]
+Z_ = U_ @ U_.T @ np.linalg.lstsq(P, xyzsdt)[0]
 
 check_rhs = phi@phi@Z_
 
@@ -151,22 +157,22 @@ print('Error l2 LR',np.linalg.norm(xyzsdt-check_rhs)/np.linalg.norm(xyzsdt))
 
 def f_(x, y, z):
 
-   phi_x = to.Tensor([psi(x), psi(y), psi(z)])
+   phi_x = mt.MTensor([psi(x), psi(y), psi(z)])
 
    return ((phi_x@phi)@Z_)[0]
 
-# ===================== SUBSAMPLING LANDO-LIKE ============
+# ===================== SUBSAMPLING ALID ============
 
 """
-apply LANDO approach to select the best fitting sample
+apply ALID approach to select the best fitting sample
 
 this is the one minimizing all distances in feature space
 
 then determine distances of all samples wrt first sample
-select new amples up until precisio criterio is reached
+select new amples up until precision criterion is reached
 use cholecky decomposition of phi@phi for this step
 
-iterative scheme fo rselection, need to evaluate influence
+iterative scheme for selection, need to evaluate influence
 of the criterion on the model (speed vs precision) has this study been done ?
 we are avaluating error in the feature space, how does it translate to real space
 note that we still require computation of the least squares solutin to
@@ -175,11 +181,11 @@ go back to data-space
 this las step can be regularized as well... how do errors add up?
 
 # TODO: test the on-the-fly method first
-compute the model when data is streamed
+ie compute the model when data is streamed
 
 """
 
-print(f'{' Here LANDO ':=^80}')
+print(f'{' Here ALID ':=^80}')
 
 import time
 
@@ -194,10 +200,10 @@ msk_rhs = [True]
 # initialize with first
 data_init = data[0]
 
-phi_lando = to.Tensor([psi(data_init[i]) for i in range(dim)])
+phi_alid = mt.MTensor([psi(data_init[i]) for i in range(dim)])
 
 # initialize cholesky factor [make it a 2D array]
-L = np.sqrt((phi_lando@phi_lando))
+L = np.sqrt((phi_alid@phi_alid))
 
 t_list = []
 t_0 = time.time()
@@ -206,21 +212,20 @@ t_0 = time.time()
 for sample in data[1:]:
 
    # evaluate phi(sample_i)
-   phi_i = to.Tensor([psi(sample[i]) for i in range(dim)])
+   phi_i = mt.MTensor([psi(sample[i]) for i in range(dim)])
 
    # vector
-   k_i = (phi_lando@phi_i)[:, 0]
+   k_i = (phi_alid@phi_i)[:, 0]
    # scalar
    k_ii = (phi_i@phi_i)[0, 0]
 
    # evaluate coef minimizing dist in feature space
-   # np.linalg.solve will use cholesky automatically
-   s = np.linalg.solve(L, k_i)
-   a = np.linalg.solve(L.T, s)
+   s = solve_triangular(L, k_i, lower=True)
+   a = solve_triangular(L.T, s)
 
    # evaluate dist in feature space
    dist = k_ii - k_i@a
-   #print(f'dist {dist}')
+   if DIST : print(f'dist {dist}')
 
    # depending on criterion keep or not [is phi_i ALD]
    if dist > tau:
@@ -229,7 +234,7 @@ for sample in data[1:]:
       msk_rhs.append(True)
 
       # append phi_i to phi
-      phi_lando.append(phi_i.cores, axis=-1)
+      phi_alid.append(phi_i.cores, axis=-1)
 
       # lower entry of L
       c_i = np.max([0., np.sqrt(k_ii-s.T@s)])
@@ -246,7 +251,7 @@ for sample in data[1:]:
 #print(t_list)
 
 # once best subset is identified based on given data, TREG
-m_ = phi_lando.shape[0]
+m_ = phi_alid.shape[0]
 
 # regul parameter
 l = 0.#1e-8
@@ -257,22 +262,22 @@ Y = xyzsdt[msk_rhs]
 # timing of solving for weights
 t1 = time.perf_counter()
 
-# define projector for LANDO (necessary single cost exclusive to this approach)
-P_lando = phi_lando@phi_lando
+# define projector for ALID (necessary single cost exclusive to this approach)
+P_alid = phi_alid@phi_alid
 
 # compute Z from P and rhs
-#Z_lando_ = np.linalg.lstsq(P_lando + l*np.eye(m_), Y)[0]
-Z_lando_ = np.linalg.lstsq(P_lando, Y)[0]
+#Z_alid_ = np.linalg.lstsq(P_alid + l*np.eye(m_), Y)[0]
+Z_alid_ = np.linalg.lstsq(P_alid, Y)[0]
 print(f'time for solving using full projector: {time.perf_counter() - t1}s')
 
 # note on condition number
-print('condition number of LANDO-style projector',np.linalg.cond(P_lando))
+print('condition number of ALID-style projector',np.linalg.cond(P_alid))
 
 # timing for solving using cholesky factorization
 t1 = time.perf_counter()
 
 # change this solving method and use L instead THEN how to regularize ?
-Z_lando = np.linalg.solve(L.T, np.linalg.solve(L, Y))
+Z_alid = np.linalg.solve(L.T, np.linalg.solve(L, Y))
 print(f'time for solving using cholesky factor: {time.perf_counter() - t1}s')
 
 """
@@ -282,23 +287,23 @@ evaluation of high precision time to perform reveals that cholesky approach is
 twice faster than least squares
 """
 
-print('difference between Z_lando lstsq - cholesky')
-print(Z_lando_ - Z_lando)
+print('difference between Z_alid lstsq - cholesky')
+print(Z_alid_ - Z_alid)
 
-print(f'Shapes for LANDO system: phi_lando: {phi_lando.shape}, Z_lando: {Z_lando.shape}')
+print(f'Shapes for ALID system: phi_alid: {phi_alid.shape}, Z_alid: {Z_alid.shape}')
 
 # online computation
-def f_lando(x, y, z):
+def f_alid(x, y, z):
 
-   phi_x = to.Tensor([psi(x), psi(y), psi(z)])
+   phi_x = mt.MTensor([psi(x), psi(y), psi(z)])
 
-   return ((phi_x@phi_lando)@Z_lando)[0]
+   return ((phi_x@phi_alid)@Z_alid)[0]
 
 
-check_rhs = phi@phi_lando@Z_lando
+check_rhs = phi@phi_alid@Z_alid
 
 # should be shit
-print('Error l2 LANDO',np.linalg.norm(xyzsdt-check_rhs)/np.linalg.norm(xyzsdt))
+print('Error l2 ALID',np.linalg.norm(xyzsdt-check_rhs)/np.linalg.norm(xyzsdt))
 
 # try to express the coefficients
 def prod(lst):
@@ -311,22 +316,23 @@ def prod(lst):
 
    return out
 
-full_phi_lando = phi_lando.full().reshape(phi_lando.shape[0], int(prod(phi_lando.shape[1:])))
+full_phi_alid = phi_alid.full().reshape(phi_alid.shape[0], int(prod(phi_alid.shape[1:])))
 
-coefs = full_phi_lando.T @ Z_lando
+coefs = full_phi_alid.T @ Z_alid
 print('coefs')
 print(coefs)
 
-print('Z_lando')
-print(Z_lando)
+print('Z_alid')
+print(Z_alid)
 
-print('full phi_lando')
-print(full_phi_lando)
+print('full phi_alid')
+print(full_phi_alid)
 
 #===================== BUILD TENSOR REGRESSION =============
 # PLOT TEST
 
 num_steps_test = int(50*num_steps)
+#num_steps_test = 20000
 
 # ------------ REAL --------------
 
@@ -384,7 +390,7 @@ print(f'time reconstructing TENSOR FULL RANK trajectory: {time.perf_counter() - 
 print(f'ie unitary cost for f_: {(time.perf_counter() - t1)/num_steps_test}s')
 
 
-plot_lorenz(*xyzs_.T, label='full rank TREG - integrated')
+plot_lorenz(*xyzs_.T, label='Least squares')
 
 
 # ------------ TENSOR LOW RANK --------------
@@ -411,10 +417,10 @@ for i in range(num_steps_test):
 print(f'time reconstructing TENSOR LOW RANK trajectory: {time.perf_counter() - t1}s')
 print(f'ie unitary cost for f_: {(time.perf_counter() - t1)/num_steps_test}s')
 
-plot_lorenz(*xyzs_r.T, label='Rank=8 TREG - integrated')
+plot_lorenz(*xyzs_r.T, label='Spec. trunc.')
 
 
-# ------------ TENSOR LANDO SUBSAMPLING --------------
+# ------------ TENSOR ALID SUBSAMPLING --------------
 
 # re-generate data from initial point using tensor integrator
 xyzs_l = np.empty((num_steps_test + 1, 3))  # Need one more for the initial values
@@ -432,28 +438,34 @@ t1 = time.perf_counter()
 # and using them to estimate the next point
 for i in range(num_steps_test):
     
-    xyzs_l[i + 1] = xyzs_l[i] + f_lando(*xyzs_l[i]) * dt
+    xyzs_l[i + 1] = xyzs_l[i] + f_alid(*xyzs_l[i]) * dt
 
 # timer for reconstruction
-print(f'time reconstructing TENSOR LANDO trajectory: {time.perf_counter() - t1}s')
+print(f'time reconstructing TENSOR ALID trajectory: {time.perf_counter() - t1}s')
 print(f'ie unitary cost for f_: {(time.perf_counter() - t1)/num_steps_test}s')
 
-plot_lorenz(*xyzs_l.T, label='ALID TREG - integrated')
+plot_lorenz(*xyzs_l.T, label='ALI reg.')
 
 plt.legend()
+if SAVEFIGS : plt.savefig('img_lorenz/lorenz_traj.pdf', bbox_inches='tight')
 plt.show()
 
 # 
 delta_full_rank = np.linalg.norm(xyzs_ - xyzs, axis=1)/np.linalg.norm(xyzs, axis=1)
 delta_low_rank = np.linalg.norm(xyzs_r - xyzs, axis=1)/np.linalg.norm(xyzs, axis=1)
-delta_lando = np.linalg.norm(xyzs_l - xyzs, axis=1)/np.linalg.norm(xyzs, axis=1)
+delta_alid = np.linalg.norm(xyzs_l - xyzs, axis=1)/np.linalg.norm(xyzs, axis=1)
 
 plt.plot(range(num_steps_test+1), delta_full_rank, label='full rank')
-plt.plot(range(num_steps_test+1), delta_low_rank, label='low rank')
-plt.plot(range(num_steps_test+1), delta_lando, label='ALI regul')
-plt.legend()
-plt.show()
+plt.plot(range(num_steps_test+1), delta_low_rank, label='low rank', linestyle='--')
+plt.plot(range(num_steps_test+1), delta_alid, label='ALI regul')
 
+plt.legend()
+plt.yscale('log')
+plt.xlabel('Timestep')
+plt.ylabel('L2 error')
+plt.grid(True, which='both')
+if SAVEFIGS :  plt.savefig('img_lorenz/lorenz_err_ref.pdf', bbox_inches='tight')
+plt.show()
 
 #plt.plot(range(num_steps_test+1), xyzs.T[0])
 #plt.show()
@@ -465,9 +477,18 @@ plt.show()
 print(f'{'-- TESTS --':^60}')
 
 TEST_PLOT = False
-TEST_PLOT_2 = True
+TEST_PLOT_2 = False
 
-for it_test in range(50):
+n_tests = 50
+
+# run with 50 times then replot with limitted window
+num_steps_test = int(n_tests*num_steps)
+#num_steps_test = 15000
+
+# store for min-max-avg fill between plot
+curves = np.zeros((n_tests, num_steps_test+1))
+
+for it_test in range(n_tests):
 
    if TEST_PLOT:
       ax = plt.figure()
@@ -475,10 +496,6 @@ for it_test in range(50):
 
    # test with other initial positions
    init_pos = np.random.random(3)
-
-   # run with 50 times then replot with limitted window
-   num_steps_test = int(50*num_steps)
-   #num_steps_test = int(25*num_steps)
 
    # initialize position output
    xyzs = np.empty((num_steps_test + 1, 3))  # Need one more for the initial values
@@ -512,10 +529,10 @@ for it_test in range(50):
    for i in range(num_steps_test):
       
       #xyzs_[i + 1] = xyzs_[i] + f(*xyzs_[i]) * dt
-      xyzs_[i + 1] = xyzs_[i] + f_lando(*xyzs_[i]) * dt
+      xyzs_[i + 1] = xyzs_[i] + f_alid(*xyzs_[i]) * dt
 
    #if TEST_PLOT: plot_lorenz(*xyzs_.T, label='full rank TREG - integrated')
-   if TEST_PLOT: plot_lorenz(*xyzs_.T, label='LANDO TREG - integrated')
+   if TEST_PLOT: plot_lorenz(*xyzs_.T, label='ALID TREG - integrated')
 
    # re-generate data from initial point using tensor integrator
    xyzs_r = np.empty((num_steps_test + 1, 3))  # Need one more for the initial values
@@ -539,14 +556,27 @@ for it_test in range(50):
       plt.show()
 
 
+   # NAME MISLEADING, IT IS ALID
    # 
    delta_full_rank = np.linalg.norm(xyzs_ - xyzs, axis=1)/np.linalg.norm(xyzs, axis=1)
    #delta_low_rank = np.linalg.norm(xyzs_r - xyzs, axis=1)/np.linalg.norm(xyzs, axis=1)
+
+   curves[it_test] = delta_full_rank
 
    if TEST_PLOT_2: 
 
       plt.plot(range(num_steps_test+1), delta_full_rank, label=f'full rank {it_test}')
       #plt.plot(range(num_steps_test+1), delta_low_rank, label=f'low rank {it_test}')
 
+
 #plt.legend()
+plt.fill_between(range(num_steps_test+1), curves.max(axis=0), curves.min(axis=0), alpha = .5, linewidth=0, color='green')
+
+plt.plot(range(num_steps_test+1), curves.sum(axis=0)/n_tests, color='green')
+
+plt.yscale('log')
+plt.xlabel('Timestep')
+plt.ylabel('L2 error')
+plt.grid(True, which='both')
+if SAVEFIGS : plt.savefig('img_lorenz/lorenz_test_ok.pdf', bbox_inches='tight')
 plt.show()

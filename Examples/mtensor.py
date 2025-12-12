@@ -1,13 +1,10 @@
 """
 Author: R.CLOAREC
-VERSION: 2.0
+VERSION: 0.2
 
-update: 02/11/2025
+update: 12/12/2025
 
-Tensor operator based on the m-tensor format
-
-TODO:
-implement kernel inspired regression tools
+MTensor operator
 
 """
 
@@ -20,7 +17,7 @@ from itertools import product
 # numpy has no specialized solver for triangular matrix
 from scipy.linalg import solve_triangular
 
-# gain for triangular matrix inversion (np.linalg.inv used currently)
+# gain for triangular matrix inversion
 #from scipy.linalg.lapack import dtrtri
 
 #===============================================================
@@ -30,9 +27,6 @@ from scipy.linalg import solve_triangular
 def mode_tensor_product( *argv ):
 	"""
 	Build the rank-1 tensor for each row of input data
-
-	TODO: build special case of single row input
-	generalize use to single vectors and vector-matrix
 	"""
 
 	args = [ np.array(arg) for arg in argv ]
@@ -103,29 +97,40 @@ def _prod(a):
 
 
 # define a class to deal with tensor calc
-class Tensor:
+class MTensor:
 	"""
-	Specific tensor format
+	Definition of the m-tensor format
 
-	Arguments:
+	Arguments: (to initialize)
 	----------
 	cores (list[np.ndarray] | np.ndarray - required) : list or array of cores of the tensor to build
 		default: []
 
 	Methods:
 	--------
-	.full() : outputs the full tensor as np.ndarray
-	.full_inv() : outputs the full pseudo inverse of the tensor as np.ndarray
-	.__repr__() : displays the output of self.full()
-	.__getitem__(ind) : depending on ind, outputs elements of the tensor
-	.__matmul__(B) : computes the contracted product on rdim with B
-	._phi1D(deg, dim, basis) : builds the 2D array for sampled data in dim in basis at deg
-	._build_cores() : builds the cores of tensor based on input data of init
-	._build_inverse() : builds the inverse cores of tensor basde on input data if init
-	.solve(rhs) : outputs the regression coefs C of least square self @ C = rhs
-	.append(mu) : appends mu (or [mus]) to tensor and re-computes cores and inverse
-
+	copy		: builds a copy of self
+	full		: builds the full tensor as np.ndarray
+	pinv		: computes self pseudoinverse
+	__repr__	: str representation of self
+	__getitem__	: item getter
+	__iter__	: iterable behaviour of the m-tensor
+	__neg__		: negative self
+	__mul__		: scalar multiplication and Hadamard product (*)
+	__rmul__	: same as before from the left
+	__truediv__	: scalar division and Hadamard division (/)
+	__rtruediv__: same as before from the left
+	contract_r	: m-tensor row-dim contraction
+	contract_c	: m-tensor column-dim contraction
+	dot			: m-product and compatible tensor-dot products
+	__matmul__	: dot (@)
+	norm		: norm of self
+	svd			: Singular Value Decomposition
+	pca			: Principal Component Analysis
+	alid		: Almost Linearly Independent Decomposition
+	solve		: solves for X in 'self @ X = y'
+	append		: appends cores or rows to self
 	"""
+
 
 	def __init__( self, cores : list[np.ndarray] = []):
 
@@ -164,10 +169,10 @@ class Tensor:
 
 	def copy(self):
 		"""
-		return copy of self
+		Return a copy of self
 		"""
 
-		return Tensor([c.copy() for c in self.cores])
+		return MTensor([c.copy() for c in self.cores])
 
 
 	def full(self):
@@ -175,8 +180,6 @@ class Tensor:
 		Returns the full version of the tensor
 
 		Full tensor construction is based on the mode tensor product
-		This product builds a tensor product for each matrix in the 
-		cores. This leads to a rank-1 tensor for each sample
 		"""
 
 		return mode_tensor_product( *self.cores )
@@ -194,7 +197,7 @@ class Tensor:
 
 			cores = [np.linalg.pinv(c).T for c in self.cores]
 
-			return Tensor(cores)
+			return MTensor(cores)
 		
 		# generalized pinv
 		else:
@@ -207,7 +210,7 @@ class Tensor:
 
 	def __repr__(self) -> str:
 		
-		repr = f'Tensor with shape {self.shape}\nWith {self.ndim} cores:\n'
+		repr = f'MTensor with shape {self.shape}\nWith {self.ndim} cores:\n'
 		
 		for core in self.cores:
 
@@ -226,7 +229,7 @@ class Tensor:
 				raise IndexError(f'Index {ind} out of range with size {self.cdim}')
 			
 			# if full is needed use self[ind].full()
-			return Tensor([c[ind] for c in self.cores])
+			return MTensor([c[ind] for c in self.cores])
 			
 		
 		# if index is given as an array
@@ -235,7 +238,7 @@ class Tensor:
 			# apply mask to cdim (select rows)
 			if ind.dtype == bool and ind.shape == self.cdim:
 
-				return Tensor([c[ind] for c in self.cores])
+				return MTensor([c[ind] for c in self.cores])
 
 			# apply mask to rdim, result is flattened in a (m, N_true) 2D array
 			if ind.dtype == bool and ind.shape == self.rdim:
@@ -349,7 +352,7 @@ class Tensor:
 			return mulself
 		
 		# term-by-term mult along m-fiber with vector or nd-array
-		if isinstance(a, Tensor):
+		if isinstance(a, MTensor):
 
 			if a.shape != self.shape :
 
@@ -401,7 +404,7 @@ class Tensor:
 			return divself
 		
 		# term-by-term mult along m-fiber with vector or nd-array
-		if isinstance(a, Tensor):
+		if isinstance(a, MTensor):
 
 			if a.shape != self.shape :
 
@@ -433,7 +436,7 @@ class Tensor:
 
 	def contract_r(self):
 		"""
-		Returns the r-dim contraction of the Tensor
+		Returns the r-dim contraction of the MTensor
 
 		result will be a vector of length c-dim
 		"""
@@ -454,7 +457,7 @@ class Tensor:
 
 	def contract_c(self):
 		"""
-		Returns the c-dim contraction of the Tensor
+		Returns the c-dim contraction of the MTensor
 
 		result will be a tensor of shape rdim
 		
@@ -483,7 +486,7 @@ class Tensor:
 		id to matrix on matrix mult. Need to build m1xm2 matrix in the end
 
 		TWO DIFFERENCIATION stages : identify if B is a full tensor
-		(ie isinstance np.ndarray) or an instance of Tensor
+		(ie isinstance np.ndarray) or an instance of MTensor
 		2nd : identify matrix or vector result 
 		
 		this operation might be combinatorial in complexity
@@ -550,9 +553,9 @@ class Tensor:
 
 				raise Exception(f'Unexpected shape {B.shape} for operand in tensor contraction with tensor of shape {self.shape}')
 
-		# if B is an instance of Tensor:
-		# compute light weight product - implies transpose of Tensor instance
-		elif isinstance(B, Tensor):
+		# if B is an instance of MTensor:
+		# compute light weight product - implies transpose of MTensor instance
+		elif isinstance(B, MTensor):
 
 			# check shape of B is coherent with self:
 			if B.shape[1:] != self.shape[1:]:
@@ -653,7 +656,7 @@ class Tensor:
 		if greedy:
 
 			# build self_ALI incrementally
-			self_ALI = Tensor([c[0] for c in self.cores])
+			self_ALI = MTensor([c[0] for c in self.cores])
 
 			# initialize cholesky factor [make it a 2D array]
 			L = np.sqrt((self_ALI@self_ALI))
@@ -665,7 +668,7 @@ class Tensor:
 			for i in range(1, self.cdim[0]):
 
 				# evaluate phi(sample_i)
-				row_i = Tensor([c[i] for c in self.cores])
+				row_i = MTensor([c[i] for c in self.cores])
 
 				b = (self_ALI@row_i)[:, 0]
 				n = (row_i@row_i)[0, 0]
@@ -708,7 +711,7 @@ class Tensor:
 			ind = np.argmin(delta.sum(axis=0))
 
 			# initialize ALID
-			self_ALI = Tensor([c[ind] for c in self.cores])
+			self_ALI = MTensor([c[ind] for c in self.cores])
 
 			# check if all dist fall under tol
 			if np.all(delta[:,ind]<tol):
@@ -901,31 +904,31 @@ class Tensor:
 # initialize a formatted tensor from shape
 def zeros( shape : tuple = (1, 1, 1) ):
 	"""
-	Returns a tensor of class Tensor of shape 'shape' filled with zeros
+	Returns a tensor of class MTensor of shape 'shape' filled with zeros
 	"""
 
 	cores = [np.zeros( (shape[0], shape[i]) ) for i in range(1, len(shape))]
 
-	return Tensor( cores )
+	return MTensor( cores )
 
 
 def ones( shape : tuple = (1, 1, 1) ):
 	"""
-	Returns a tensor of class Tensor of shape 'shape' filled with ones
+	Returns a tensor of class MTensor of shape 'shape' filled with ones
 	"""
 
 	cores = [np.ones( (shape[0], shape[i]) ) for i in range(1, len(shape))]
 
-	return Tensor( cores )
+	return MTensor( cores )
 
 
 def randn( shape : tuple = (1, 1, 1) ):
 	"""
-	Returns a tensor of class Tensor of shape 'shape' filled with random floats
+	Returns a tensor of class MTensor of shape 'shape' filled with random floats
 	"""
 
 	cores = [np.random.randn( shape[0], shape[i] ) for i in range(1, len(shape))]
 
-	return Tensor( cores )
+	return MTensor( cores )
 
 # ==============================================================

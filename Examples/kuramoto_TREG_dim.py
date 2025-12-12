@@ -3,6 +3,13 @@
 Kuramoto model
 ================
 
+Author: R.CLOAREC
+Date: 12/12/2025
+
+Info: this file implements the example use of m-tensor
+for dynamical system learning on the case of Kuramoto
+oscillators.
+
 """
 
 import matplotlib.pyplot as plt
@@ -11,7 +18,6 @@ import numpy as np
 import tensorop as to
 
 #============ UTILS ================================
-
 
 # exact kuramoto system
 def kuramoto(x, omega, *, K=2):
