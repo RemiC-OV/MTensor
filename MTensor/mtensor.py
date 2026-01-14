@@ -143,7 +143,7 @@ class MTensor:
 
 			cores_ = cores
 
-		if not np.all([c.shape[0] == cores[0].shape[0] for c in cores]):
+		if not np.all([c.shape[0] == cores_[0].shape[0] for c in cores_]):
 
 			raise Exception(f"All cores should share same first shape (col dim)")
 
