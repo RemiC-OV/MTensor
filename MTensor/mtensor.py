@@ -1390,9 +1390,9 @@ class SparseMTensor:
 
 				raise Exception(f'Shape {B.shape} incoherent for dot product with tensor of shape {self.shape}')
 
-			res = np.ones((self.shape[0], B.shape[0]))
+			res = self.cores[0]@B.cores[0].T
 
-			for i in range(len(self.shape[1:])):
+			for i in range(1,len(self.shape[1:])):
 
 				res *= self.cores[i]@B.cores[i].T
 					
