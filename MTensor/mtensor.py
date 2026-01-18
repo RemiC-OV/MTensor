@@ -2,7 +2,7 @@
 Author: R.CLOAREC
 VERSION: 0.2
 
-update: 12/12/2025
+update: 18/01/2026
 
 MTensor operator
 
