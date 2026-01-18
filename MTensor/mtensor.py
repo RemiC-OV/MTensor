@@ -963,7 +963,7 @@ class SparseMTensor:
 	def __init__( self, cores : list[sp.csr_array] = []):
 
 		# note bsr_arrays all have ndim=2, if any other type
-		if np.all([not isinstance(sp.csr_array) for c in cores]):
+		if np.all([not isinstance(c, sp.csr_array) for c in cores]):
 
 			try :
 
