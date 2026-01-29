@@ -1036,7 +1036,7 @@ class SparseMTensor:
 		# separated axes pinv
 		if separated:
 
-			cores = [np.linalg.pinv(c.toarray()).T for c in self.cores]
+			cores = [sp.linalg.inv(c).T for c in self.cores]
 
 			return MTensor(cores)
 		
