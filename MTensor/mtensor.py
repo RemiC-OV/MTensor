@@ -2,8 +2,6 @@
 Author: R.CLOAREC
 VERSION: 0.2
 
-update: 18/01/2026
-
 MTensor operator
 
 """
@@ -924,6 +922,26 @@ def randn( shape : tuple = (1, 1, 1) ):
 
 # ==============================================================
 
+# sparse solve util
+
+# sparse pinv
+def sp_pinv(M):
+	"""
+	Docstring for sp_pinv
+	
+	:param M: Description
+	"""
+	m = M.shape[0]
+	I = np.eye(m)
+	lil_solve = sp.lil_array(M.shape)
+
+	for i in range(m):
+		
+		lil_solve[i] = sp.linalg.lsqr(M, I[:, i])[0]
+
+	return lil_solve.T.tocsr()
+
+
 # define a class to deal with sparse cores tensor calc
 class SparseMTensor:
 	"""
@@ -1036,7 +1054,7 @@ class SparseMTensor:
 		# separated axes pinv
 		if separated:
 
-			cores = [sp.linalg.inv(c).T for c in self.cores]
+			cores = [sp_pinv(c).T for c in self.cores]
 
 			return MTensor(cores)
 		
