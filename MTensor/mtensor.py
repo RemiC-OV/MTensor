@@ -2,8 +2,6 @@
 Author: R.CLOAREC
 VERSION: 0.2
 
-update: 12/12/2025
-
 MTensor operator
 
 """
@@ -924,6 +922,26 @@ def randn( shape : tuple = (1, 1, 1) ):
 
 # ==============================================================
 
+# sparse solve util
+
+# sparse pinv
+def sp_pinv(M):
+	"""
+	Docstring for sp_pinv
+	
+	:param M: Description
+	"""
+	m = M.shape[0]
+	I = np.eye(m)
+	lil_solve = sp.lil_array(M.shape)
+
+	for i in range(m):
+		
+		lil_solve[i] = sp.linalg.lsqr(M, I[:, i])[0]
+
+	return lil_solve.T.tocsr()
+
+
 # define a class to deal with sparse cores tensor calc
 class SparseMTensor:
 	"""
@@ -963,7 +981,7 @@ class SparseMTensor:
 	def __init__( self, cores : list[sp.csr_array] = []):
 
 		# note bsr_arrays all have ndim=2, if any other type
-		if np.all([not isinstance(sp.csr_array) for c in cores]):
+		if np.all([not isinstance(c, sp.csr_array) for c in cores]):
 
 			try :
 
@@ -1036,7 +1054,7 @@ class SparseMTensor:
 		# separated axes pinv
 		if separated:
 
-			cores = [np.linalg.pinv(c.toarray()).T for c in self.cores]
+			cores = [sp_pinv(c).T for c in self.cores]
 
 			return MTensor(cores)
 		
@@ -1390,9 +1408,9 @@ class SparseMTensor:
 
 				raise Exception(f'Shape {B.shape} incoherent for dot product with tensor of shape {self.shape}')
 
-			res = np.ones((self.shape[0], B.shape[0]))
+			res = self.cores[0]@B.cores[0].T
 
-			for i in range(len(self.shape[1:])):
+			for i in range(1,len(self.shape[1:])):
 
 				res *= self.cores[i]@B.cores[i].T
 					
