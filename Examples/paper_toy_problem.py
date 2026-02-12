@@ -1,7 +1,7 @@
 # toy problem
 
 import numpy as np
-import tensoropV2 as mt
+import mtensor as mt
 
 def f(x, y):
 
@@ -18,7 +18,7 @@ psi = lambda x: np.array([1, x, x**2])
 psi_1 = np.array([psi(xi[0]) for xi in P])
 psi_2 = np.array([psi(xi[1]) for xi in P])
 
-phi = mt.Tensor([psi_1, psi_2])
+phi = mt.MTensor([psi_1, psi_2])
 print(phi)
 
 phi_m = phi.full().reshape((3,9))
@@ -32,4 +32,5 @@ print(f'Matrix-based least squares result\n{c}')
 z = np.linalg.lstsq(phi@phi, y)[0]
 print(f'M-Tensor intermediate z\n{z}')
 C = np.einsum('ijk,k->ij', phi.full().T, z)
+
 print(f'M-Tensor-based least squares result\n{C}')
