@@ -633,12 +633,15 @@ class MTensor:
 		return U, np.sqrt(S)
 
 
-	def alid(self, tol : float = 1e-3, greedy : bool = True, compute_w : bool = True):
+	def alid(self, tol : float = 1e-3, greedy : bool = True, compute_w : bool = True, mask : bool = True):
 		"""
 		Computes the Almost linearly independent decomposition of self
 
 		if compute_w is true, returns 
 		"""
+
+		# initialize output as tuple
+		output = ()
 
 		# greedy ALID
 		if greedy:
@@ -762,15 +765,19 @@ class MTensor:
 				
 					# break loop and return
 					break
+
+		output += (self_ALI,)
 		
 		# -- RETURN --
 		if compute_w:
 
-			return self_ALI, W
+			output += (W,)
 		
-		else:
+		if mask:
 
-			return self_ALI
+			output += (msk,)
+
+		return output
 
 
 	def solve(self, rhs : np.ndarray, regul : float = 0., separated : bool = False):
