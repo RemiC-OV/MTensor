@@ -646,7 +646,7 @@ class MTensor:
 		# initialize the mask
 		if mask: msk = np.zeros(self.cdim, dtype=bool)
 
-		# greedy ALID
+		# streamed ALID
 		if not greedy:
 
 			# build self_ALI incrementally
@@ -709,7 +709,7 @@ class MTensor:
 			delta = np.array([[P[i,i]-(P[i,j]**2/P[j,j]) for i in range(self.cdim[0])] for j in range(self.cdim[0])])
 
 			# index of minimizing column
-			ind = np.argmin(delta.sum(axis=0))
+			ind = int(np.argmin(delta.sum(axis=0)))
 
 			# update mask
 			if mask: msk[ind] = True
@@ -761,13 +761,13 @@ class MTensor:
 				if mask: msk[ind] = True
 
 				# append row to ALID
-				self_ALI.append([c[ind] for c in self[msk_].cores])
+				self_ALI.append([c[ind] for c in self[msk_].cores], axis=-1)
 
 				# compute vector s
 				s = S[:, ind]
 
 				# update Cholesky factor
-				L = np.vstack((np.c_[L, np.zeros(L.shape[0])], np.r_[s.T, np.sqrt(self[ind].norm()**2 - s@s)]))
+				L = np.vstack((np.c_[L, np.zeros(L.shape[0])], np.r_[s.T, np.sqrt(self[msk_][ind].norm()**2 - s@s)]))
 
 				# update mask (restrict T_bar)
 				msk_[ind] = False
