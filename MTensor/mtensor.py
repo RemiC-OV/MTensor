@@ -633,7 +633,7 @@ class MTensor:
 		return U, np.sqrt(S)
 
 
-	def alid(self, tol : float = 1e-3, greedy : bool = True, compute_w : bool = True, mask : bool = True):
+	def alid(self, tol : float = 1e-3, greedy : bool = False, compute_w : bool = True, mask : bool = True):
 		"""
 		Computes the Almost linearly independent decomposition of self
 
@@ -643,8 +643,11 @@ class MTensor:
 		# initialize output as tuple
 		output = ()
 
+		# initialize the mask
+		if mask: msk = np.zeros(self.cdim, dtype=bool)
+
 		# greedy ALID
-		if greedy:
+		if not greedy:
 
 			# build self_ALI incrementally
 			self_ALI = MTensor([c[0] for c in self.cores])
@@ -654,6 +657,9 @@ class MTensor:
 
 			# initialize weights
 			if compute_w: W = np.array([[1.]])
+
+			# update mask
+			if mask: msk[0] = True
 
 			# stream like data loop
 			for i in range(1, self.cdim[0]):
@@ -683,13 +689,17 @@ class MTensor:
 					if compute_w:
 
 						W = np.vstack((np.c_[W, np.zeros(W.shape[0])], np.r_[np.zeros(W.shape[1]), 1.]))
+								
+					# update mask
+					if mask: msk[i] = True
 
 				elif compute_w:
 
 					# simply update weights
 					W = np.vstack((W, solve_triangular(L.T, s)))
 
-		# optimal ALID
+
+		# greedy ALID
 		else:
 
 			# to build delta_0, build proj
@@ -701,35 +711,42 @@ class MTensor:
 			# index of minimizing column
 			ind = np.argmin(delta.sum(axis=0))
 
+			# update mask
+			if mask: msk[ind] = True
+
 			# initialize ALID
 			self_ALI = MTensor([c[ind] for c in self.cores])
 
 			# check if all dist fall under tol
 			if np.all(delta[:,ind]<tol):
 
+				output += (self_ALI,)
+
 				if compute_w: 
 					
 					W = (1/self_ALI.norm()**2)(self@self_ALI)
 
-					return self_ALI, W
+					output += (W,)
 
-				else: return self_ALI
+				if mask: output += (msk,)
+
+				return output
 
 			# initialize Cholesky factor
 			L = np.array([[self_ALI.norm()]])
 			
 			# build mask (T_bar in paper)
-			msk = np.ones(self.cdim, dtype=bool)
-			msk[ind] = False
+			msk_ = np.ones(self.cdim, dtype=bool)
+			msk_[ind] = False
 
 			# loop on rows
 			for k in range(1, self.cdim[0]):
 
 				# build vector of norms of rows
-				n = np.array([row.norm() for row in self[msk]])
+				n = np.array([row.norm() for row in self[msk_]])
 
 				# build matrix B
-				B = self_ALI@self[msk]
+				B = self_ALI@self[msk_]
 
 				# build matrix S
 				S = solve_triangular(L, B)
@@ -740,8 +757,11 @@ class MTensor:
 				# index of minimizing column
 				ind = np.argmin(delta.sum(axis=0))
 
+				# update mask
+				if mask: msk[ind] = True
+
 				# append row to ALID
-				self_ALI.append([c[ind] for c in self[msk].cores])
+				self_ALI.append([c[ind] for c in self[msk_].cores])
 
 				# compute vector s
 				s = S[:, ind]
@@ -750,7 +770,7 @@ class MTensor:
 				L = np.vstack((np.c_[L, np.zeros(L.shape[0])], np.r_[s.T, np.sqrt(self[ind].norm()**2 - s@s)]))
 
 				# update mask (restrict T_bar)
-				msk[ind] = False
+				msk_[ind] = False
 
 				# check if all dist fall under tol
 				if np.all(delta[:,ind]<tol):
@@ -773,9 +793,7 @@ class MTensor:
 
 			output += (W,)
 		
-		if mask:
-
-			output += (msk,)
+		if mask: output += (msk,)
 
 		return output
 
