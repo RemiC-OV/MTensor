@@ -854,6 +854,8 @@ class MTensor:
 		with len self.ndim. Each element will be appended at the bottom of each core
 		"""
 
+		output = self.copy()
+
 		# Append new core(s): axis==None
 		if axis == None:
 
@@ -864,7 +866,7 @@ class MTensor:
 
 					raise Exception(f"All cores should share same first shape (col dim)")				
 
-				self.cores += x
+				output.cores += x
 			
 			# if input is a single new core
 			elif isinstance(x, np.ndarray):
@@ -873,19 +875,19 @@ class MTensor:
 
 					raise Exception(f'Appended core should have column size {self.cdim[0]}, not {x.shape[0]}')
 
-				self.cores.append( x )
+				output.cores.append( x )
 		
 		# Append data along m-fiber (bottom of each core): axis==0
 		if axis == -1:
 
 			for i in range(self.ndim):
 
-				self.cores[i] = np.vstack( (self.cores[i], x[i]) )
+				output.cores[i] = np.vstack( (output.cores[i], x[i]) )
 
 		# Append data along i-th core: axis==i
 		elif axis >= 0 and axis <= self.ndim:
 
-			self.cores[axis] = np.c_[ self.cores[axis], x ]
+			output.cores[axis] = np.c_[ output.cores[axis], x ]
 
 		elif axis > self.ndim :
 
@@ -893,22 +895,22 @@ class MTensor:
 
 		# then update dims of tensor
 		# ndim (ndarray equiv)
-		self.ndim = len(self.cores)
+		output.ndim = len(output.cores)
 
 		# order of the tensor
-		self.order = self.ndim + 1
+		output.order = output.ndim + 1
 
 		# columns dimensions (m-mode fibers shape)
-		self.cdim = (self.cores[0].shape[0],)
+		output.cdim = (output.cores[0].shape[0],)
 
 		# rows dimensions (p-modes fibers shapes)
-		self.rdim = tuple([ core.shape[1] for core in self.cores ])
+		output.rdim = tuple([ core.shape[1] for core in output.cores ])
 
 		# define the shape of full self
-		self.shape = self.cdim + self.rdim
+		output.shape = output.cdim + output.rdim
 
 
-		return self
+		return output
 
 
 #===============================================================
