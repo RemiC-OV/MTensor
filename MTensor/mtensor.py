@@ -743,13 +743,13 @@ class MTensor:
 			for k in range(1, self.cdim[0]):
 
 				# build vector of norms of rows
-				n = np.array([row.norm() for row in self[msk_]])
+				n = np.array([row.norm()**2 for row in self[msk_]])
 
 				# build matrix B
 				B = self_ALI@self[msk_]
 
 				# build matrix S
-				S = solve_triangular(L, B)
+				S = solve_triangular(L, B, lower=True)
 
 				# build matrix delta
 				delta = ( n*np.ones((self.cdim[0]-k, self.cdim[0]-k)) ).T - S.T@S
