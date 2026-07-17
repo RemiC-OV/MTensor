@@ -645,21 +645,20 @@ class MTensor:
 		return U, np.sqrt(S)
 
 
-	def alid(self, tol : float = 1e-3, greedy : bool = True, compute_w : bool = True):
+	def subsample(self, tol : float = 1e-3, greedy : bool = False, compute_w : bool = True):
 		"""
-		Computes the Almost linearly independent decomposition of self
-
+		Computes the subsample of self
 		if compute_w is true, returns 
 		"""
 
-		# greedy ALID
-		if greedy:
+		# streamed subsampling
+		if not greedy:
 
 			# build self_ALI incrementally
-			self_ALI = MTensor([c[0] for c in self.cores])
+			self_sub = MTensor([c[0] for c in self.cores])
 
 			# initialize cholesky factor [make it a 2D array]
-			L = np.sqrt((self_ALI@self_ALI))
+			L = np.sqrt((self_sub@self_sub))
 
 			# initialize weights
 			if compute_w: W = np.array([[1.]])
@@ -670,7 +669,7 @@ class MTensor:
 				# evaluate phi(sample_i)
 				row_i = MTensor([c[i] for c in self.cores])
 
-				b = (self_ALI@row_i)[:, 0]
+				b = (self_sub@row_i)[:, 0]
 				n = (row_i@row_i)[0, 0]
 
 				# evaluate coef minimizing dist in feature space
@@ -683,7 +682,7 @@ class MTensor:
 				if dist > tol:
 
 					# append row_i to phi
-					self_ALI.append(row_i.cores, axis=-1)
+					self_sub.append(row_i.cores, axis=-1)
 
 					# update cholesky factor
 					L = np.vstack((np.c_[L, np.zeros(L.shape[0])], np.r_[s.T, np.sqrt(dist)]))
@@ -698,7 +697,7 @@ class MTensor:
 					# simply update weights
 					W = np.vstack((W, solve_triangular(L.T, s)))
 
-		# optimal ALID
+		# greedy subsampling
 		else:
 
 			# to build delta_0, build proj
@@ -710,22 +709,22 @@ class MTensor:
 			# index of minimizing column
 			ind = np.argmin(delta.sum(axis=0))
 
-			# initialize ALID
-			self_ALI = MTensor([c[ind] for c in self.cores])
+			# initialize
+			self_sub = MTensor([c[ind] for c in self.cores])
 
 			# check if all dist fall under tol
 			if np.all(delta[:,ind]<tol):
 
 				if compute_w: 
 					
-					W = (1/self_ALI.norm()**2)(self@self_ALI)
+					W = (1/self_sub.norm()**2)(self@self_sub)
 
-					return self_ALI, W
+					return self_sub, W
 
-				else: return self_ALI
+				else: return self_sub
 
 			# initialize Cholesky factor
-			L = np.array([[self_ALI.norm()]])
+			L = np.array([[self_sub.norm()]])
 			
 			# build mask (T_bar in paper)
 			msk = np.ones(self.cdim, dtype=bool)
@@ -738,7 +737,7 @@ class MTensor:
 				n = np.array([row.norm() for row in self[msk]])
 
 				# build matrix B
-				B = self_ALI@self[msk]
+				B = self_sub@self[msk]
 
 				# build matrix S
 				S = solve_triangular(L, B)
@@ -749,8 +748,8 @@ class MTensor:
 				# index of minimizing column
 				ind = np.argmin(delta.sum(axis=0))
 
-				# append row to ALID
-				self_ALI.append([c[ind] for c in self[msk].cores])
+				# append row to subsample
+				self_sub.append([c[ind] for c in self[msk].cores])
 
 				# compute vector s
 				s = S[:, ind]
@@ -770,7 +769,7 @@ class MTensor:
 						L_inv = np.linalg.inv(L)
 
 						# compute weights
-						W = (self@self_ALI)@L_inv.T@L_inv
+						W = (self@self_sub)@L_inv.T@L_inv
 				
 					# break loop and return
 					break
@@ -778,11 +777,11 @@ class MTensor:
 		# -- RETURN --
 		if compute_w:
 
-			return self_ALI, W
+			return self_sub, W
 		
 		else:
 
-			return self_ALI
+			return self_sub
 
 
 	def solve(self, rhs : np.ndarray, regul : float = 0., separated : bool = False):
